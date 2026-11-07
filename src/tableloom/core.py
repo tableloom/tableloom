@@ -1,4 +1,6 @@
+import copy
 import io
+from warnings import warn
 
 # Reformat table_color as dict of tuples
 
@@ -20,26 +22,54 @@ dict_colors = {
 
 def build_table(
     df,
-    color,
-    font_size="medium",
-    font_family="Century Gothic, sans-serif",
-    text_align="left",
-    width="auto",
-    index=False,
-    even_color="black",
-    even_bg_color="white",
-    odd_bg_color=None,
-    border_bottom_color=None,
-    escape=True,
-    width_dict=None,
-    padding="0px 20px 0px 0px",
-    float_format=None,
-    conditions=None,
-):
-    width_dict = width_dict or []
-    conditions = conditions or {}
+    color: str = "blue_light",
+    font_size: str = "medium",
+    font_family: str = "Century Gothic, sans-serif",
+    text_align: str = "left",
+    width: str = "auto",
+    index: bool = False,
+    even_color: str = "black",
+    even_bg_color: str = "white",
+    odd_bg_color: str | None = None,
+    border_bottom_color: str | None = None,
+    escape: bool = True,
+    width_dict: list | None = None,
+    padding: str = "0px 20px 0px 0px",
+    float_format: str | None = None,
+    conditions: dict | None = None,
+) -> str:
+    """
+    Build an HTML table from a pandas DataFrame with customizable styling options.
+
+    Args:
+        df (pd.DataFrame): The DataFrame to convert to an HTML table.
+        color (str): The color scheme to use for the table. Must be one of the keys in dict_colors.
+        font_size (str): The font size for the table text.
+        font_family (str): The font family for the table text.
+        text_align (str): The text alignment for the table cells.
+        width (str): The width of the table. Can be a fixed value (e.g., "500px") or "auto".
+        index (bool): Whether to include the DataFrame index in the table.
+        even_color (str): The text color for even rows.
+        even_bg_color (str): The background color for even rows.
+        odd_bg_color (str): The background color for odd rows. If None, the default from dict_colors is used.
+        border_bottom_color (str): The color of the bottom border of the table. If None, the default from dict_colors is used.
+        escape (bool): Whether to escape HTML characters in the DataFrame values.
+        width_dict (list): A list of widths for each column. If provided, must match the number of columns in the DataFrame.
+        padding (str): The padding for the table cells.
+        float_format (str): A format string for floating-point numbers (e.g., "%.2f").
+        conditions (dict): A dictionary specifying conditional formatting rules for specific columns.
+    Returns:
+        str: An HTML string representing the styled table.
+    """
+    width_dict = list(width_dict) if width_dict is not None else []
+    conditions = copy.deepcopy(conditions) if conditions is not None else {}
     if df.empty:
         return ""
+
+    if color not in dict_colors:
+        raise ValueError(
+            f"Invalid color '{color}'. Supported colors are: {', '.join(sorted(dict_colors.keys()))}"
+        )
 
     # Set color
     color, border_bottom, odd_background_color, header_background_color = dict_colors[
@@ -52,6 +82,7 @@ def build_table(
     if border_bottom_color:
         border_bottom = border_bottom_color
 
+    body = ""
     a = 0
     while a != len(df):
         if a == 0:
@@ -266,92 +297,72 @@ def build_table(
 
     if conditions:
         for k in conditions:
-            try:
-                conditions[k]["index"] = list(df.columns).index(k)
-                width_body = ""
-                w = 0
-                for line in io.StringIO(body):
-                    updated_body = False
-                    if w == conditions[k]["index"]:
-                        try:
-                            if (
-                                int(repr(line).split(">")[1].split("<")[0])
-                                < conditions[k]["min"]
-                            ):
-                                if "color: black" in repr(line):
-                                    width_body = (
-                                        width_body
-                                        + repr(line).replace(
-                                            "color: black",
-                                            "color: " + conditions[k]["min_color"],
-                                        )[1:]
-                                    )
-                                elif "color: white" in repr(line):
-                                    width_body = (
-                                        width_body
-                                        + repr(line).replace(
-                                            "color: white",
-                                            "color: " + conditions[k]["min_color"],
-                                        )[1:]
-                                    )
-                                else:
-                                    width_body = (
-                                        width_body
-                                        + repr(line).replace(
-                                            '">',
-                                            "; color: "
-                                            + conditions[k]["min_color"]
-                                            + '">',
-                                        )[1:]
-                                    )
-                                updated_body = True
-                            elif (
-                                int(repr(line).split(">")[1].split("<")[0])
-                                > conditions[k]["max"]
-                            ):
-                                if "color: black" in repr(line):
-                                    width_body = (
-                                        width_body
-                                        + repr(line).replace(
-                                            "color: black",
-                                            "color: " + conditions[k]["max_color"],
-                                        )[1:]
-                                    )
-                                elif "color: white" in repr(line):
-                                    width_body = (
-                                        width_body
-                                        + repr(line).replace(
-                                            "color: white",
-                                            "color: " + conditions[k]["max_color"],
-                                        )[1:]
-                                    )
-                                else:
-                                    width_body = (
-                                        width_body
-                                        + repr(line).replace(
-                                            '">',
-                                            "; color: "
-                                            + conditions[k]["max_color"]
-                                            + '">',
-                                        )[1:]
-                                    )
-                                updated_body = True
-                        except (ValueError, IndexError, KeyError, TypeError):
-                            pass
-                    if not updated_body:
-                        width_body = width_body + repr(line)[1:]
+            if k not in df.columns:
+                warn(
+                    f"Column '{k}' specified in conditions does not exist in the DataFrame. Skipping this condition."
+                )
+                continue
+            col_index = list(df.columns).index(k)
+            cond = conditions[k]
+            has_min = "min" in cond and "min_color" in cond
+            has_max = "max" in cond and "max_color" in cond
+            if not has_min and not has_max:
+                continue
 
-                    if (
-                        str(repr(line))[:10] == "'      <td"
-                        or str(repr(line))[:10] == "'      <th"
-                    ):
-                        if w == len(df.columns) - 1:
-                            w = 0
-                        else:
-                            w += 1
-                body = width_body[: len(width_body) - 1]
-            except (KeyError, ValueError, TypeError):
-                pass
+            width_body = ""
+            w = 0
+            for line in io.StringIO(body):
+                updated_body = False
+                if w == col_index:
+                    try:
+                        cell_text = repr(line).split(">")[1].split("<")[0]
+                        cell_val = float(cell_text)
+                        color_to_apply = None
+                        if has_min and cell_val < cond["min"]:
+                            color_to_apply = cond["min_color"]
+                        elif has_max and cell_val > cond["max"]:
+                            color_to_apply = cond["max_color"]
+
+                        if color_to_apply:
+                            if "color: black" in repr(line):
+                                width_body = (
+                                    width_body
+                                    + repr(line).replace(
+                                        "color: black",
+                                        "color: " + color_to_apply,
+                                    )[1:]
+                                )
+                            elif "color: white" in repr(line):
+                                width_body = (
+                                    width_body
+                                    + repr(line).replace(
+                                        "color: white",
+                                        "color: " + color_to_apply,
+                                    )[1:]
+                                )
+                            else:
+                                width_body = (
+                                    width_body
+                                    + repr(line).replace(
+                                        '">',
+                                        "; color: " + color_to_apply + '">',
+                                    )[1:]
+                                )
+                            updated_body = True
+                    except (ValueError, IndexError):
+                        pass
+                if not updated_body:
+                    width_body = width_body + repr(line)[1:]
+
+                if (
+                    str(repr(line))[:10] == "'      <td"
+                    or str(repr(line))[:10] == "'      <th"
+                ):
+                    if w == len(df.columns) - 1:
+                        w = 0
+                    else:
+                        w += 1
+            body = width_body[: len(width_body) - 1]
 
     if len(width_dict) == len(df.columns):
         width_body = ""
