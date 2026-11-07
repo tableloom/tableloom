@@ -193,7 +193,7 @@ def test_build_table_html_structure_validity():
     html = build_table(df, color="blue_light")
 
     assert html.startswith("<p><table")
-    assert html.endswith(("</table></p>\n","</table></p>"))
+    assert html.endswith(("</table></p>\n", "</table></p>"))
     assert html.count("<table") == html.count("</table>") == 1
     assert html.count("<thead>") == html.count("</thead>") == 1
     assert html.count("<tbody>") == html.count("</tbody>") == 1
